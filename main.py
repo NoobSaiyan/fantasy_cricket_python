@@ -157,7 +157,7 @@ class Ui_MainWindow(object):
         spacerItem8 = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Minimum)
         self.horizontalLayout_4.addItem(spacerItem8)
         self.verticalLayout_7.addLayout(self.horizontalLayout_4)
-        self.Player_Catergory_value = QtWidgets.QTextEdit(self.left)
+        self.Player_Catergory_value = QtWidgets.QListWidget(self.left)
         self.Player_Catergory_value.setObjectName("Player_Catergory_value")
         self.verticalLayout_7.addWidget(self.Player_Catergory_value)
         self.bottom.addWidget(self.left)
@@ -202,7 +202,7 @@ class Ui_MainWindow(object):
         self.Team_Name.setAlignment(QtCore.Qt.AlignCenter)
         self.Team_Name.setObjectName("Team_Name")
         self.right.addWidget(self.Team_Name)
-        self.Player_Selected_value = QtWidgets.QTextEdit(self.right_2)
+        self.Player_Selected_value = QtWidgets.QListWidget(self.right_2)
         self.Player_Selected_value.setObjectName("Player_Selected_value")
         self.right.addWidget(self.Player_Selected_value)
         self.bottom.addWidget(self.right_2)
@@ -234,13 +234,27 @@ class Ui_MainWindow(object):
         self.retranslateUi(MainWindow)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
+
+         # connect handle functions
+        self.menuManage_Teams.triggered[QtWidgets.QAction].connect(self.menu_handle)
+        for rb in [self.BAT_radio, self.BWL_radio, self.AR_radio, self.WK_radio]:
+            rb.toggled.connect(self.radio_button_handler)
+        
+        self.default_variables()
+        self.update_ui()
+
+        # list double clicked actions
+        self.Player_Catergory_value.itemDoubleClicked.connect(self.remove_from_available_players)
+        self.Player_Selected_value.itemDoubleClicked.connect(self.remove_from_chosen_players)
+
+
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow"))
         self.Batsmen.setText(_translate("MainWindow", "Batsmen"))
-        self.Bowler.setText(_translate("MainWindow", "Bowler"))
-        self.All_Rounder.setText(_translate("MainWindow", "All-Rounder"))
-        self.Wicket_Keeper.setText(_translate("MainWindow", "Wicket-Keeper"))
+        self.Bowler.setText(_translate("MainWindow", "Bowlers"))
+        self.All_Rounder.setText(_translate("MainWindow", "All-Rounders"))
+        self.Wicket_Keeper.setText(_translate("MainWindow", "Wicket-Keepers"))
         self.Points_Left.setText(_translate("MainWindow", "Points Left:"))
         self.Plyer_Category.setText(_translate("MainWindow", "Player Category"))
         self.BAT_radio.setText(_translate("MainWindow", "BAT"))
@@ -256,9 +270,283 @@ class Ui_MainWindow(object):
         self.actionSave_Team.setText(_translate("MainWindow", "Save Team"))
         self.actionEvaluate_Score.setText(_translate("MainWindow", "Evaluate Team"))
 
+    #------------------------------#
+    #setting default values of the variables
+    #------------------------------#
+    def default_variables(self):
+        self.batsmen = 0
+        self.bowler = 0
+        self.all_rounder= 0
+        self.wicket_keeper = 0
+        self.points_left = 1000
+        self.points_used = 0
+        self.team_name = 'NO_TEAM_SELECTED'
+        self.radio_buttons_enabled = False
+
+        total_players = {}
+        cricket_db_cursor.execute('SELECT player, value, ctg FROM stats;')
+        for record in cricket_db_cursor.fetchall():
+            total_players.update(
+                {
+                    record[0]: {
+                        "name": record[0],
+                        "value": record[1],
+                        "ctg": record[2]
+                    }
+                }
+            )
+
+        self.total_players = total_players.copy()
+
+        # clearing both lists
+        self.Player_Catergory_value.clear()
+        self.Player_Selected_value.clear()
+
+    #------------------------------#
+    #updating UI of the app
+    #------------------------------#
+    def update_ui(self):
+        # update ui according to current variables
+        self.Batsmen_value.setText(str(self.batsmen))
+        self.Bowler_value.setText(str(self.bowler))
+        self.All_Rounder_value.setText(str(self.all_rounder))
+        self.Wicket_Keeper_value.setText(str(self.wicket_keeper))
+        self.Points_Left_value.setText(str(self.points_left))
+        self.Points_Used_value.setText(str(self.points_used))
+        self.Team_Name.setText(self.team_name)
+
+        radio_buttons = [self.BAT_radio, self.BWL_radio, self.AR_radio, self.WK_radio]
+        if(self.radio_buttons_enabled):
+            for rb in radio_buttons:
+                rb.setEnabled(True)
+        else:
+            for rb in radio_buttons:
+                rb.setEnabled(False)
+                rb.setChecked(False)
+    
+    #------------------------------#
+    #radio button handler
+    #------------------------------#
+    def radio_button_handler(self):
+        for rb in [self.BAT_radio, self.BWL_radio, self.AR_radio, self.WK_radio]:
+            if(rb.isChecked()):
+                self.populate_players_list(rb.text())
+    
+    #------------------------------#
+    #populating the list with the available players
+    #------------------------------#
+    def populate_players_list(self, category = 'ALL'):
+        self.Player_Catergory_value.clear()
+        players = []
+        for index in range(self.Player_Selected_value.count()):
+            players.append(self.Player_Selected_value.item(index).text())
+        for player in self.total_players.values():
+            #if player already in chosen list dont add it to available players
+            if player['name'] in players:
+                continue
+            # category in radio button is BOW but in db its BWL
+            if(category == 'BOW'):
+                category = 'BWL'
+            if category == 'ALL':
+                self.Player_Catergory_value.addItem(player['name'])
+            elif category == player['ctg']:
+                self.Player_Catergory_value.addItem(player['name'])
+
+
+    def remove_from_available_players(self, item):
+        self.add_player_to_team(item.text())
+        self.Player_Catergory_value.takeItem(self.Player_Catergory_value.row(item))
+        self.Player_Selected_value.addItem(item.text())
+        
+    def remove_from_chosen_players(self, item):
+        self.Player_Selected_value.takeItem(self.Player_Selected_value.row(item))
+        self.Player_Catergory_value.addItem(item.text())
+        self.remove_player_from_team(item.text())
+        # update list according to category seletect in radio button
+        self.radio_button_handler()
+
+    def add_player_to_team(self, name):        
+        player = self.total_players[name]
+
+        if player['ctg'] == 'BAT':
+            self.batsmen += 1
+        elif player['ctg'] == 'BWL':
+            self.bowler += 1
+        elif player['ctg'] == 'AR':
+            self.all_rounder +=1
+        elif player['ctg'] == 'WK':
+            self.wicket_keeper += 1
+        self.points_left -= player['value']
+        self.points_used += player['value']       
+        self.update_ui()
+
+    def remove_player_from_team(self, name):
+        player = self.total_players[name]
+
+        if player['ctg'] == 'BAT':
+            self.batsmen -= 1
+        elif player['ctg'] == 'BWL':
+            self.bowler -= 1
+        elif player['ctg'] == 'AR':
+            self.all_rounder -=1
+        elif player['ctg'] == 'WK':
+            self.wicket_keeper -= 1
+
+        self.points_left += player['value']
+        self.points_used -= player['value']
+        self.update_ui()
+    #------------------------------#
+    #handling menu options
+    #------------------------------#
+    #menu handle main funciton
+    #------------------------------#
+    def menu_handle(self,action):
+        option_used = action.text()
+        # creating new team
+        if(option_used) == 'New Team':
+            self.create_team()
+        #opening existing team
+        elif option_used == 'Open Team':
+            try:
+                self.open_team()
+                print('I: team opend succesfully')
+            except Exception as error:
+                print(f'ERROR: {error}')
+        #saving the new team
+        elif option_used == 'Save Team':
+            try:
+                self.save_team()
+                print('MESSAGE: team saved successfully')
+                self.message(heading = 'Success', desc = 'Team Saved Successfully')
+            except ValueError as error:
+                print(f'ERROR: {error}')
+                self.message(heading = 'Error', desc = str(error), icon='critical')
+            except Exception as error:
+                print(f'ERROR: {error}')
+                self.message(heading = 'Error', desc = str(error), icon='critical')
+        #Evaluation of team 
+        elif option_used == 'Evaluate Team':
+            try:
+                self.evaluate_team()
+            except Exception as error:
+                print(f'ERROR: {error}')
+                self.message(heading = 'Error', desc = str(error), icon='critical')   
+    #------------------------------#
+    #creating new team
+    #------------------------------#
+    def create_team(self):
+        value, confirmed = QtWidgets.QInputDialog.getText(MainWindow, 'Fantasy Cricket', 'Enter Team Name')
+        if confirmed:
+            self.default_variables()
+            self.team_name = value
+            self.populate_players_list()
+            self.radio_buttons_enabled = True
+            self.update_ui()
+    #------------------------------#
+    #saving the team we created
+    #------------------------------#
+    def save_team(self):
+        team_players = self.batsmen + self.bowler + self.all_rounder + self.wicket_keeper
+        
+        if team_players > 11:
+            raise ValueError('You can only have 11 players in team')
+        if team_players < 11:
+            raise ValueError('You must have atleast 11 players in team')
+
+        team_name = self.team_name
+        team_players_string = ''
+        team_value = 0
+
+        for i in range(self.Player_Selected_value.count()):
+            player_name = self.Player_Selected_value.item(i).text()
+            team_players_string += player_name if i == 0 else f':{player_name}'
+            team_value += self.total_players[player_name]['value']
+
+        try:
+            sql = f"""INSERT INTO teams (name, players, value) 
+                VALUES ("{team_name}", "{team_players_string}", {team_value})
+                ON CONFLICT(name) 
+                DO UPDATE SET players = "{team_players_string}", value = {team_value} WHERE name = "{team_name}";"""
+            cricket_db_cursor.execute(sql)
+            cricket_db.commit()
+        except Exception as error:
+            cricket_db.rollback()
+            raise error
+
+        return True
+    #------------------------------#
+    #opening team from database
+    #------------------------------#
+    def open_team(self):        
+        # getting teams
+        teams = {}
+        cricket_db_cursor.execute('SELECT name, players, value FROM teams')
+        for record in cricket_db_cursor.fetchall():
+            teams.update({
+                record[0]: {
+                    "name": record[0],
+                    "players": record[1].split(':'),
+                    "value": record[2]
+                }
+            })                                
+        
+        if len(teams):
+            opened_team, confirmed = QtWidgets.QInputDialog.getItem(MainWindow, "Fantasy Cricket", "Choose a team", teams.keys(), 0, False)
+        else:
+            raise ValueError('No saved teams found')
+
+        if not confirmed:
+            raise ValueError('No team selected')
+        
+        #loading defaults and updating ui
+        self.default_variables()
+        self.update_ui()
+
+        #updating variable values to the opened team
+        self.team_name = opened_team
+        self.points_left -= teams[opened_team]['value']
+        self.points_used = teams[opened_team]['value']
+
+        for player_name in teams[self.team_name]['players']:
+            if self.total_players[player_name]['ctg'] == 'BAT':
+                self.batsmen += 1
+            elif self.total_players[player_name]['ctg'] == 'BWL':
+                self.bowler += 1
+            elif self.total_players[player_name]['ctg'] == 'AR':
+                self.all_rounder +=1
+            elif self.total_players[player_name]['ctg'] == 'WK':
+                self.wicket_keeper += 1
+            
+            self.Player_Selected_value.addItem(player_name)
+        
+        
+        # refreshing ui
+        self.populate_players_list()
+        self.radio_buttons_enabled = True
+        self.update_ui()
+    #------------------------------#
+    #popup message 
+    #------------------------------#
+    def message(self, heading = 'Error', desc = 'Unknown Error Occured', icon = None):
+        QMessageBox = QtWidgets.QMessageBox
+        if not icon: icon = QMessageBox.Information
+        if icon == 'critical': icon = QMessageBox.Critical
+        msg = QMessageBox()
+        msg.setIcon(icon)
+        msg.setText(heading)
+        msg.setInformativeText(desc + '\t\t\t')
+        msg.setWindowTitle('Fantasy Cricket')
+        msg.exec_()    
 
 if __name__ == "__main__":
     import sys
+    import sqlite3
+    # from evaluateTeam import Ui_EvaluateTeamDialog
+
+    # db connection
+    cricket_db = sqlite3.connect('cricket.db')
+    cricket_db_cursor = cricket_db.cursor()
+
     app = QtWidgets.QApplication(sys.argv)
     MainWindow = QtWidgets.QMainWindow()
     ui = Ui_MainWindow()
