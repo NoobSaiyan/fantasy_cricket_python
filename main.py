@@ -323,7 +323,6 @@ class Ui_MainWindow(object):
             for rb in radio_buttons:
                 rb.setEnabled(False)
                 rb.setChecked(False)
-    
     #------------------------------#
     #radio button handler
     #------------------------------#
@@ -331,7 +330,6 @@ class Ui_MainWindow(object):
         for rb in [self.BAT_radio, self.BWL_radio, self.AR_radio, self.WK_radio]:
             if(rb.isChecked()):
                 self.populate_players_list(rb.text())
-    
     #------------------------------#
     #populating the list with the available players
     #------------------------------#
@@ -351,20 +349,25 @@ class Ui_MainWindow(object):
                 self.Player_Catergory_value.addItem(player['name'])
             elif category == player['ctg']:
                 self.Player_Catergory_value.addItem(player['name'])
-
-
+    #------------------------------#
+    #removing from the not selected player list
+    #------------------------------#
     def remove_from_available_players(self, item):
         self.add_player_to_team(item.text())
         self.Player_Catergory_value.takeItem(self.Player_Catergory_value.row(item))
-        self.Player_Selected_value.addItem(item.text())
-        
+        self.Player_Selected_value.addItem(item.text()) 
+    #------------------------------#
+    #removing form the chosen players list
+    #------------------------------#
     def remove_from_chosen_players(self, item):
         self.Player_Selected_value.takeItem(self.Player_Selected_value.row(item))
         self.Player_Catergory_value.addItem(item.text())
         self.remove_player_from_team(item.text())
         # update list according to category seletect in radio button
         self.radio_button_handler()
-
+    #------------------------------#
+    #adding player to the selected player list
+    #------------------------------#
     def add_player_to_team(self, name):        
         player = self.total_players[name]
 
@@ -379,7 +382,9 @@ class Ui_MainWindow(object):
         self.points_left -= player['value']
         self.points_used += player['value']       
         self.update_ui()
-
+    #------------------------------#
+    #removing players form the selected player list
+    #------------------------------#
     def remove_player_from_team(self, name):
         player = self.total_players[name]
 
@@ -395,6 +400,8 @@ class Ui_MainWindow(object):
         self.points_left += player['value']
         self.points_used -= player['value']
         self.update_ui()
+
+
     #------------------------------#
     #handling menu options
     #------------------------------#
@@ -446,22 +453,29 @@ class Ui_MainWindow(object):
     #saving the team we created
     #------------------------------#
     def save_team(self):
-        team_players = self.batsmen + self.bowler + self.all_rounder + self.wicket_keeper
-        
+        team_players = self.batsmen + self.bowler + self.all_rounder + self.wicket_keeper     
+        #validations
         if team_players > 11:
             raise ValueError('You can only have 11 players in team')
         if team_players < 11:
             raise ValueError('You must have atleast 11 players in team')
-
+        if self.points_left < 0:
+            raise ValueError('You don\'t have enough points available')        
+        if self.wicket_keeper > 1:
+            raise ValueError('You can only have one Wicket Keeper in team')        
+        if self.batsmen > 5:
+            raise ValueError('You cat\'t have more than 5 Batsmen in team')
+        if self.bowler > 5:
+            raise ValueError('You can\'t have more than 5 Bowlers in team')
+        if self.all_rounder > 3:
+            raise ValueError('You can\'t have more than 3 all rounders in team')
         team_name = self.team_name
         team_players_string = ''
         team_value = 0
-
         for i in range(self.Player_Selected_value.count()):
             player_name = self.Player_Selected_value.item(i).text()
             team_players_string += player_name if i == 0 else f':{player_name}'
             team_value += self.total_players[player_name]['value']
-
         try:
             sql = f"""INSERT INTO teams (name, players, value) 
                 VALUES ("{team_name}", "{team_players_string}", {team_value})
@@ -472,7 +486,6 @@ class Ui_MainWindow(object):
         except Exception as error:
             cricket_db.rollback()
             raise error
-
         return True
     #------------------------------#
     #opening team from database
@@ -488,25 +501,20 @@ class Ui_MainWindow(object):
                     "players": record[1].split(':'),
                     "value": record[2]
                 }
-            })                                
-        
+            })                                     
         if len(teams):
             opened_team, confirmed = QtWidgets.QInputDialog.getItem(MainWindow, "Fantasy Cricket", "Choose a team", teams.keys(), 0, False)
         else:
             raise ValueError('No saved teams found')
-
         if not confirmed:
             raise ValueError('No team selected')
-        
         #loading defaults and updating ui
         self.default_variables()
         self.update_ui()
-
         #updating variable values to the opened team
         self.team_name = opened_team
         self.points_left -= teams[opened_team]['value']
         self.points_used = teams[opened_team]['value']
-
         for player_name in teams[self.team_name]['players']:
             if self.total_players[player_name]['ctg'] == 'BAT':
                 self.batsmen += 1
@@ -518,12 +526,29 @@ class Ui_MainWindow(object):
                 self.wicket_keeper += 1
             
             self.Player_Selected_value.addItem(player_name)
-        
-        
         # refreshing ui
         self.populate_players_list()
         self.radio_buttons_enabled = True
         self.update_ui()
+
+    #------------------------------#
+    #function to open evaluation dailog
+    #------------------------------#
+    def evaluate_team(self):
+        # check if atleast one team is present in database
+        try:
+            cricket_db_cursor.execute('SELECT name, players, value FROM teams')
+        except Exception as error:
+            raise error
+
+        if len(cricket_db_cursor.fetchall()):
+            # open evaluate dialog
+            Dialog = QtWidgets.QDialog()
+            ui = Ui_Dialog()
+            ui.setupUi(Dialog)
+            result = Dialog.exec()
+        else:
+            raise ValueError('No saved teams found')
     #------------------------------#
     #popup message 
     #------------------------------#
@@ -541,7 +566,7 @@ class Ui_MainWindow(object):
 if __name__ == "__main__":
     import sys
     import sqlite3
-    # from evaluateTeam import Ui_EvaluateTeamDialog
+    from evaluateTeam import Ui_Dialog
 
     # db connection
     cricket_db = sqlite3.connect('cricket.db')
